@@ -1,41 +1,43 @@
 {
-  "name": "dotkit",
-  "version": "1.5.0",
-  "description": "A powerful CLI toolkit for managing environment variables and .env files.",
+  "name": "setup-dotenv",
+  "version": "2.0.0",
+  "description": "A CLI tool for setting up and managing .env files.",
   "keywords": [
     "dotenv",
     "environment",
-    "variables",
-    "template",
+    "setup",
     "sync",
-    "setup"
+    "template",
+    "variables"
   ],
-  "homepage": "https://github.com/venables/dotkit#readme",
-  "bugs": "https://github.com/venables/dotkit/issues",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/venables/dotkit.git"
-  },
+  "homepage": "https://github.com/venables/setup-dotenv#readme",
+  "bugs": "https://github.com/venables/setup-dotenv/issues",
   "license": "MIT",
   "author": "Matt Venables <matt@venabl.es>",
-  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/venables/setup-dotenv.git"
+  },
   "bin": {
-    "dotkit": "dist/index.js"
+    "setup-dotenv": "dist/index.js"
   },
   "files": [
     "dist"
   ],
+  "type": "module",
   "scripts": {
     "build": "tsdown",
-    "check": "biome check . && bun run typecheck && bun test --coverage && bun run publint",
-    "clean": "git clean -xdf dist",
-    "dev": "bun run ./src/index.ts",
-    "fix": "biome check --write .",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
-    "lint": "biome lint .",
-    "nuke": "bun clean && rm -rf node_modules",
-    "outdated": "npx npm-check-updates --interactive --format group",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun test",
+    "clean": "git clean -xdf node_modules/.cache dist",
+    "cli": "bun run ./src/index.ts",
+    "fix": "bun run format && bun run lint:fix",
+    "format": "oxfmt",
+    "format:check": "bun run format -- --check",
+    "lint": "oxlint --type-aware",
+    "lint:fix": "bun run lint -- --fix --fix-suggestions",
+    "lint:fixall": "bun run lint:fix -- --fix-dangerously",
+    "nuke": "bun run clean && git clean -xdf node_modules",
+    "outdated": "bunx npm-check-updates --interactive --format group",
     "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit --pretty"
   },
@@ -44,10 +46,12 @@
     "dotenv": "^17.2.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.1.4",
     "@types/bun": "^1.2.19",
     "@types/node": "^24.2.1",
-    "publint": "^0.3.12",
+    "oxfmt": "latest",
+    "oxlint": "latest",
+    "oxlint-tsgolint": "latest",
+    "publint": "latest",
     "tsdown": "^0.13.4",
     "typescript": "^5"
   }
