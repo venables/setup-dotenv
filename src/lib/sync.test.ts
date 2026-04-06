@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
+
 import { syncDotenv } from "./sync.js"
 
 describe("syncDotenv", () => {
@@ -24,7 +25,7 @@ describe("syncDotenv", () => {
 
     const result = syncDotenv({
       envPath: testEnvPath,
-      templatePath: testExamplePath,
+      templatePath: testExamplePath
     })
 
     expect(result.bootstrapped).toBe(true)
@@ -38,11 +39,14 @@ describe("syncDotenv", () => {
   it("returns no changes when all variables are present", () => {
     const content = "API_KEY=my_key\nDB_URL=postgres://prod"
     writeFileSync(testEnvPath, content)
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
-      templatePath: testExamplePath,
+      templatePath: testExamplePath
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -53,11 +57,14 @@ describe("syncDotenv", () => {
 
   it("appends missing variables to existing .env", () => {
     writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
-      templatePath: testExamplePath,
+      templatePath: testExamplePath
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -72,11 +79,14 @@ describe("syncDotenv", () => {
 
   it("handles empty .env file", () => {
     writeFileSync(testEnvPath, "")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
-      templatePath: testExamplePath,
+      templatePath: testExamplePath
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -89,12 +99,18 @@ describe("syncDotenv", () => {
   })
 
   it("handles .env with comments and empty lines", () => {
-    writeFileSync(testEnvPath, "# This is a comment\nAPI_KEY=my_key\n\n# Another comment")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost")
+    writeFileSync(
+      testEnvPath,
+      "# This is a comment\nAPI_KEY=my_key\n\n# Another comment"
+    )
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
-      templatePath: testExamplePath,
+      templatePath: testExamplePath
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -104,12 +120,15 @@ describe("syncDotenv", () => {
 
   it("only copies specified variables when provided", () => {
     writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      variables: ["DB_URL", "PORT"],
+      variables: ["DB_URL", "PORT"]
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -124,12 +143,15 @@ describe("syncDotenv", () => {
   })
 
   it("bootstraps with only specified variables", () => {
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      variables: ["API_KEY", "DB_URL"],
+      variables: ["API_KEY", "DB_URL"]
     })
 
     expect(result.bootstrapped).toBe(true)
@@ -145,12 +167,15 @@ describe("syncDotenv", () => {
 
   it("handles non-existent variables gracefully", () => {
     writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      variables: ["NON_EXISTENT", "DB_URL", "ALSO_MISSING"],
+      variables: ["NON_EXISTENT", "DB_URL", "ALSO_MISSING"]
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -165,12 +190,15 @@ describe("syncDotenv", () => {
 
   it("shows what would be copied in dry run mode", () => {
     writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      dryRun: true,
+      dryRun: true
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -185,12 +213,15 @@ describe("syncDotenv", () => {
   })
 
   it("shows bootstrap in dry run mode", () => {
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      dryRun: true,
+      dryRun: true
     })
 
     expect(result.bootstrapped).toBe(true)
@@ -203,13 +234,16 @@ describe("syncDotenv", () => {
 
   it("shows filtered variables in dry run mode", () => {
     writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
       variables: ["DB_URL", "PORT"],
-      dryRun: true,
+      dryRun: true
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -223,11 +257,14 @@ describe("syncDotenv", () => {
 
   it("overwrites empty values by default when source has non-empty value", () => {
     writeFileSync(testEnvPath, 'API_KEY=my_key\nDB_URL=""\nDEBUG=false')
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=\nNEW_VAR=value")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=\nNEW_VAR=value"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
-      templatePath: testExamplePath,
+      templatePath: testExamplePath
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -242,12 +279,15 @@ describe("syncDotenv", () => {
 
   it("does not overwrite empty values when --no-overwrite-empty-values is used", () => {
     writeFileSync(testEnvPath, 'API_KEY=my_key\nDB_URL=""')
-    writeFileSync(testExamplePath, "API_KEY=example_key\nDB_URL=postgres://localhost\nNEW_VAR=value")
+    writeFileSync(
+      testExamplePath,
+      "API_KEY=example_key\nDB_URL=postgres://localhost\nNEW_VAR=value"
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      overwriteEmptyValues: false,
+      overwriteEmptyValues: false
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -260,12 +300,15 @@ describe("syncDotenv", () => {
   })
 
   it("skips empty source values when --skip-empty-source-values is used", () => {
-    writeFileSync(testExamplePath, 'API_KEY=example_key\nDB_URL=""\nDEBUG=\nVALID_VAR=value')
+    writeFileSync(
+      testExamplePath,
+      'API_KEY=example_key\nDB_URL=""\nDEBUG=\nVALID_VAR=value'
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      skipEmptySourceValues: true,
+      skipEmptySourceValues: true
     })
 
     expect(result.bootstrapped).toBe(true)
@@ -282,13 +325,16 @@ describe("syncDotenv", () => {
 
   it("combines both flags correctly", () => {
     writeFileSync(testEnvPath, 'API_KEY=""\nEXISTING=value')
-    writeFileSync(testExamplePath, 'API_KEY=filled_key\nDB_URL=""\nNEW_VAR=new_value')
+    writeFileSync(
+      testExamplePath,
+      'API_KEY=filled_key\nDB_URL=""\nNEW_VAR=new_value'
+    )
 
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
       overwriteEmptyValues: false,
-      skipEmptySourceValues: true,
+      skipEmptySourceValues: true
     })
 
     expect(result.bootstrapped).toBe(false)
@@ -309,7 +355,7 @@ describe("syncDotenv", () => {
     const result = syncDotenv({
       envPath: testEnvPath,
       templatePath: testExamplePath,
-      dryRun: true,
+      dryRun: true
     })
 
     expect(result.bootstrapped).toBe(false)

@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
+
 import { parse } from "dotenv"
+
 import { getValueForKey, type SetupResult, type SyncOptions } from "./common"
 
 interface DetailedSetupResult extends SetupResult {
@@ -9,15 +11,19 @@ interface DetailedSetupResult extends SetupResult {
 function getKeysToProcess(
   templateParsed: Record<string, string>,
   variables?: string[],
-  skipEmptySourceValues?: boolean,
+  skipEmptySourceValues?: boolean
 ): string[] {
   const allTemplateKeys = Object.keys(templateParsed)
   let keysToInclude =
-    variables && variables.length > 0 ? variables.filter((key) => allTemplateKeys.includes(key)) : allTemplateKeys
+    variables && variables.length > 0
+      ? variables.filter((key) => allTemplateKeys.includes(key))
+      : allTemplateKeys
 
   // Filter out keys with empty values if skipEmptySourceValues is enabled
   if (skipEmptySourceValues) {
-    keysToInclude = keysToInclude.filter((key) => templateParsed[key] && templateParsed[key].trim() !== "")
+    keysToInclude = keysToInclude.filter(
+      (key) => templateParsed[key] && templateParsed[key].trim() !== ""
+    )
   }
 
   return keysToInclude
@@ -30,12 +36,14 @@ function bootstrapEnvFile(
   keysToBootstrap: string[],
   variables?: string[],
   dryRun?: boolean,
-  skipEmptySourceValues?: boolean,
+  skipEmptySourceValues?: boolean
 ): void {
   if (dryRun) return
 
   if ((variables && variables.length > 0) || skipEmptySourceValues) {
-    const filteredLines = keysToBootstrap.map((key) => `${key}="${getValueForKey(key, templateParsed)}"`)
+    const filteredLines = keysToBootstrap.map(
+      (key) => `${key}="${getValueForKey(key, templateParsed)}"`
+    )
     writeFileSync(envPath, `${filteredLines.join("\n")}\n`)
     return
   }
@@ -48,13 +56,13 @@ function appendMissingVariables(
   envPath: string,
   missingKeys: string[],
   defaults: Record<string, string>,
-  dryRun?: boolean,
+  dryRun?: boolean
 ): void {
   if (dryRun || missingKeys.length === 0) return
 
   const lines = missingKeys.map((k) => `${k}="${getValueForKey(k, defaults)}"`)
   writeFileSync(envPath, `\n${lines.join("\n")}\n`, {
-    flag: "a",
+    flag: "a"
   })
 }
 
@@ -65,7 +73,7 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     variables,
     dryRun,
     overwriteEmptyValues = true,
-    skipEmptySourceValues = false,
+    skipEmptySourceValues = false
   } = options
 
   const templateContent = readFileSync(templatePath, "utf8")
@@ -73,7 +81,11 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
 
   // Handle bootstrap case (no .env file exists)
   if (!existsSync(envPath)) {
-    const keysToBootstrap = getKeysToProcess(templateParsed, variables, skipEmptySourceValues)
+    const keysToBootstrap = getKeysToProcess(
+      templateParsed,
+      variables,
+      skipEmptySourceValues
+    )
 
     bootstrapEnvFile(
       envPath,
@@ -82,7 +94,7 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
       keysToBootstrap,
       variables,
       dryRun,
-      skipEmptySourceValues,
+      skipEmptySourceValues
     )
 
     const missingKeyValues = keysToBootstrap.reduce(
@@ -90,20 +102,24 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
         acc[key] = getValueForKey(key, templateParsed)
         return acc
       },
-      {} as Record<string, string>,
+      {} as Record<string, string>
     )
 
     return {
       bootstrapped: true,
       missingCount: keysToBootstrap.length,
       missingKeys: keysToBootstrap,
-      missingKeyValues,
+      missingKeyValues
     }
   }
 
   // Handle sync case (.env file exists)
   const current = parse(readFileSync(envPath, "utf8"))
-  const availableKeys = getKeysToProcess(templateParsed, variables, skipEmptySourceValues)
+  const availableKeys = getKeysToProcess(
+    templateParsed,
+    variables,
+    skipEmptySourceValues
+  )
 
   // Filter keys to sync based on missing keys and empty value overwrite logic
   const missingKeys = availableKeys.filter((key) => {
@@ -112,7 +128,12 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     }
 
     // Key exists - check if we should overwrite empty values
-    if (overwriteEmptyValues && current[key] === "" && templateParsed[key] && templateParsed[key].trim() !== "") {
+    if (
+      overwriteEmptyValues &&
+      current[key] === "" &&
+      templateParsed[key] &&
+      templateParsed[key].trim() !== ""
+    ) {
       return true // Overwrite empty value with non-empty template value
     }
 
@@ -126,13 +147,13 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
       acc[key] = getValueForKey(key, templateParsed)
       return acc
     },
-    {} as Record<string, string>,
+    {} as Record<string, string>
   )
 
   return {
     bootstrapped: false,
     missingCount: missingKeys.length,
     missingKeys,
-    missingKeyValues,
+    missingKeyValues
   }
 }
