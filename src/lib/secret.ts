@@ -1,13 +1,28 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
+
 import { parse } from "dotenv"
-import { type GenerateOptions, generateRandomHex, type SetupResult } from "./common"
+
+import {
+  type GenerateOptions,
+  generateRandomValue,
+  type SetupResult
+} from "./common"
 
 interface DetailedGenerateResult extends SetupResult {
   missingKeyValues?: Record<string, string>
 }
 
-export function generateVariables(options: GenerateOptions): DetailedGenerateResult {
-  const { envPath, variables, length = 32, dryRun, force } = options
+export function generateVariables(
+  options: GenerateOptions
+): DetailedGenerateResult {
+  const {
+    envPath,
+    variables,
+    length = 32,
+    encoding = "base64url",
+    dryRun,
+    force
+  } = options
 
   const bootstrapped = !existsSync(envPath)
   let existingKeys: string[] = []
@@ -21,12 +36,16 @@ export function generateVariables(options: GenerateOptions): DetailedGenerateRes
 
     if (!force) {
       // Filter out variables that already exist and have non-empty values
-      variablesToGenerate = variables.filter((key) => !(key in existingParsed) || existingParsed[key] === "")
+      variablesToGenerate = variables.filter(
+        (key) => !(key in existingParsed) || existingParsed[key] === ""
+      )
     }
   }
 
   if (!dryRun && variablesToGenerate.length > 0) {
-    const lines = variablesToGenerate.map((key) => `${key}="${generateRandomHex(length)}"`)
+    const lines = variablesToGenerate.map(
+      (key) => `${key}="${generateRandomValue(length, encoding)}"`
+    )
 
     if (bootstrapped) {
       // Create new file
@@ -40,7 +59,9 @@ export function generateVariables(options: GenerateOptions): DetailedGenerateRes
       const existingParsed = parse(existingContent)
 
       // Remove variables that we're regenerating (existing ones we want to overwrite)
-      const variablesToRemove = variablesToGenerate.filter((key) => key in existingParsed)
+      const variablesToRemove = variablesToGenerate.filter(
+        (key) => key in existingParsed
+      )
       let updatedContent = existingContent
 
       // Remove existing lines for variables we're regenerating
@@ -59,7 +80,7 @@ export function generateVariables(options: GenerateOptions): DetailedGenerateRes
     } else {
       // Append to existing file (normal mode)
       writeFileSync(envPath, `\n${lines.join("\n")}\n`, {
-        flag: "a",
+        flag: "a"
       })
     }
   }
@@ -67,16 +88,16 @@ export function generateVariables(options: GenerateOptions): DetailedGenerateRes
   // Generate sample values for dry-run display
   const missingKeyValues = variablesToGenerate.reduce(
     (acc, key) => {
-      acc[key] = generateRandomHex(length)
+      acc[key] = generateRandomValue(length, encoding)
       return acc
     },
-    {} as Record<string, string>,
+    {} as Record<string, string>
   )
 
   return {
     bootstrapped,
     missingCount: variablesToGenerate.length,
     missingKeys: variablesToGenerate,
-    missingKeyValues,
+    missingKeyValues
   }
 }
