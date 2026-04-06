@@ -150,6 +150,12 @@ All modules use `dotenv` package for parsing environment files and Node.js
   handles random value creation
 - **Independent commands** - each command has a single, clear responsibility
 
+### Changelog
+
+Always update `CHANGELOG.md` when making user-facing changes. Add entries under
+the `## Unreleased` section. When releasing a new version, rename `Unreleased`
+to the version number and add a fresh `## Unreleased` section above it.
+
 ### Test Conventions
 
 - Test descriptions use assertive language: "handles X" not "should handle X"
