@@ -4,11 +4,12 @@
   "description": "A CLI tool for setting up and managing .env files.",
   "keywords": [
     "dotenv",
+    "env",
     "environment",
+    "secrets",
     "setup",
     "sync",
-    "template",
-    "variables"
+    "template"
   ],
   "homepage": "https://github.com/venables/setup-dotenv#readme",
   "bugs": "https://github.com/venables/setup-dotenv/issues",
