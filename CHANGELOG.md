@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## 3.0.1
+
 - Fix `sync --resolve-op` failing with `expected data on stdin but none found`
   on recent versions of the 1Password CLI. `op inject` is now invoked with
   `-i <tmpfile>` (written to a private temp directory and cleaned up after the
