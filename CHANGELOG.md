@@ -2,7 +2,21 @@
 
 ## Unreleased
 
-Nothing yet.
+- Fix `sync --resolve-op` failing with `expected data on stdin but none found`
+  on recent versions of the 1Password CLI. `op inject` is now invoked with
+  `-i <tmpfile>` (written to a private temp directory and cleaned up after the
+  call) instead of receiving the template via a Node-supplied stdin pipe.
+- Fix `sync` leaving duplicate key lines behind when overwriting empty values.
+  The original empty line is now replaced in place rather than having the new
+  `KEY="value"` appended at the bottom of the file. All forms that
+  `dotenv.parse` treats as empty are recognised, including: `KEY=`, `KEY=""`,
+  `KEY=''`, `KEY= # comment`, `KEY="" # comment`, `export KEY=`, and
+  whitespace/multi-space variations. Existing `export` prefixes, indentation,
+  trailing comments, ordering, and non-matching lines are preserved. If a line
+  still somehow cannot be matched, `sync` now emits a loud warning before
+  appending rather than silently creating a duplicate. Output message wording
+  updated from "Appended" to "Updated" to reflect that changes may be in-place
+  rewrites rather than appends.
 
 ## 3.0.0
 

@@ -184,6 +184,86 @@ describe("syncDotenv", () => {
     expect(envContent).toContain('NEW_VAR="value"')
   })
 
+  it("replaces empty lines in place instead of leaving duplicates behind", () => {
+    writeFileSync(
+      testEnvPath,
+      "GOOGLE_CLIENT_ID=\nGOOGLE_CLIENT_SECRET=\nKEEP_ME=stay"
+    )
+    writeFileSync(
+      testExamplePath,
+      "GOOGLE_CLIENT_ID=id_value\nGOOGLE_CLIENT_SECRET=secret_value\nKEEP_ME=example"
+    )
+
+    syncDotenv({ envPath: testEnvPath, templatePath: testExamplePath })
+
+    const envContent = readFileSync(testEnvPath, "utf8")
+    // Original empty lines should be gone, not duplicated below.
+    expect(envContent).not.toMatch(/^GOOGLE_CLIENT_ID=\s*$/m)
+    expect(envContent).not.toMatch(/^GOOGLE_CLIENT_SECRET=\s*$/m)
+    // Resolved values present.
+    expect(envContent).toContain('GOOGLE_CLIENT_ID="id_value"')
+    expect(envContent).toContain('GOOGLE_CLIENT_SECRET="secret_value"')
+    // Untouched line still in place, not duplicated.
+    expect(envContent.match(/KEEP_ME=stay/g)?.length).toBe(1)
+    // Exactly one occurrence of each overwritten key.
+    expect(envContent.match(/GOOGLE_CLIENT_ID=/g)?.length).toBe(1)
+    expect(envContent.match(/GOOGLE_CLIENT_SECRET=/g)?.length).toBe(1)
+  })
+
+  it("preserves order and comments when replacing empty lines in place", () => {
+    writeFileSync(
+      testEnvPath,
+      "# top comment\nFIRST=one\nAPI_KEY=\n# trailing comment\nLAST=done"
+    )
+    writeFileSync(
+      testExamplePath,
+      "FIRST=ignored\nAPI_KEY=resolved\nLAST=ignored"
+    )
+
+    syncDotenv({ envPath: testEnvPath, templatePath: testExamplePath })
+
+    const envContent = readFileSync(testEnvPath, "utf8")
+    expect(envContent).toBe(
+      '# top comment\nFIRST=one\nAPI_KEY="resolved"\n# trailing comment\nLAST=done\n'
+    )
+  })
+
+  it("replaces empty lines with trailing comments and preserves the comment", () => {
+    writeFileSync(
+      testEnvPath,
+      'A_KEY= # please fill in\nB_KEY="" # also required\nC_KEY=normal'
+    )
+    writeFileSync(testExamplePath, "A_KEY=alpha\nB_KEY=bravo\nC_KEY=charlie")
+
+    syncDotenv({ envPath: testEnvPath, templatePath: testExamplePath })
+
+    const envContent = readFileSync(testEnvPath, "utf8")
+    expect(envContent).toBe(
+      'A_KEY="alpha" # please fill in\nB_KEY="bravo" # also required\nC_KEY=normal\n'
+    )
+    expect(envContent.match(/A_KEY=/g)?.length).toBe(1)
+    expect(envContent.match(/B_KEY=/g)?.length).toBe(1)
+  })
+
+  it("replaces empty lines that use the `export` prefix", () => {
+    writeFileSync(
+      testEnvPath,
+      'export A_KEY=\nexport B_KEY=""\n  export   C_KEY =  "" # note'
+    )
+    writeFileSync(testExamplePath, "A_KEY=alpha\nB_KEY=bravo\nC_KEY=charlie")
+
+    syncDotenv({ envPath: testEnvPath, templatePath: testExamplePath })
+
+    const envContent = readFileSync(testEnvPath, "utf8")
+    expect(envContent).toContain('export A_KEY="alpha"')
+    expect(envContent).toContain('export B_KEY="bravo"')
+    expect(envContent).toContain('export   C_KEY="charlie" # note')
+    // No duplicate key lines.
+    expect(envContent.match(/A_KEY=/g)?.length).toBe(1)
+    expect(envContent.match(/B_KEY=/g)?.length).toBe(1)
+    expect(envContent.match(/C_KEY=/g)?.length).toBe(1)
+  })
+
   it("does not overwrite empty values when --no-overwrite-empty-values is used", () => {
     writeFileSync(testEnvPath, 'API_KEY=my_key\nDB_URL=""')
     writeFileSync(

@@ -81,7 +81,7 @@ program
             )
           } else {
             console.log(
-              `[DRY RUN] Would append ${result.missingCount} variable(s) to ${options.target}:`
+              `[DRY RUN] Would update ${result.missingCount} variable(s) in ${options.target}:`
             )
             result.missingKeys.forEach((key) => {
               const value = result.missingKeyValues?.[key] || ""
@@ -94,7 +94,7 @@ program
           console.log("All variables already present – nothing to do.")
         } else {
           console.log(
-            `Appended ${result.missingCount} variable(s) to ${options.target}`
+            `Updated ${result.missingCount} variable(s) in ${options.target}`
           )
         }
       } catch (error) {
