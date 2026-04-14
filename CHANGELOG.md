@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-Nothing yet.
+- Add `--resolve-op` flag to `sync` that pipes the template through the
+  1Password CLI's `op inject` before syncing. Opt-in, streams via stdin/stdout
+  (no temp files), preserves template comments and formatting, and masks values
+  in dry-run so previews never leak plaintext secrets. Templates without any
+  `op://` references are a no-op even when the flag is set, so it is safe to
+  alias as a default. `op://` references must be quoted in the template —
+  unquoted refs are rejected with a clear error to prevent `dotenv`'s
+  `#`-comment parsing from silently truncating resolved values.
 
 ## 2.0.1
 

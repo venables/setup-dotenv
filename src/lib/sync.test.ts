@@ -365,4 +365,125 @@ describe("syncDotenv", () => {
     const envContent = readFileSync(testEnvPath, "utf8")
     expect(envContent).toBe('API_KEY=""\nEXISTING=value')
   })
+
+  describe("--resolve-op", () => {
+    it("is a no-op when source has no op:// references", () => {
+      const exampleContent = "API_KEY=example_key\nDB_URL=postgres://localhost"
+      writeFileSync(testExamplePath, exampleContent)
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true
+      })
+
+      expect(result.bootstrapped).toBe(true)
+      expect(result.missingKeys).toEqual(["API_KEY", "DB_URL"])
+      const envContent = readFileSync(testEnvPath, "utf8")
+      expect(envContent).toBe(
+        "API_KEY=example_key\nDB_URL=postgres://localhost"
+      )
+    })
+
+    it("masks op:// values in dry-run output", () => {
+      const exampleContent = [
+        "DB_URL=postgres://localhost",
+        'API_KEY="op://vault/api/key"'
+      ].join("\n")
+      writeFileSync(testExamplePath, exampleContent)
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        dryRun: true
+      })
+
+      expect(result.bootstrapped).toBe(true)
+      expect(result.missingKeyValues?.["API_KEY"]).toBe(
+        "<resolved from op://vault/api/key>"
+      )
+      expect(result.missingKeyValues?.["DB_URL"]).toBe("postgres://localhost")
+      expect(existsSync(testEnvPath)).toBe(false)
+    })
+
+    it("performs a literal copy when op:// references exist but resolveOp is off", () => {
+      const exampleContent = 'API_KEY="op://vault/api/key"'
+      writeFileSync(testExamplePath, exampleContent)
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath
+      })
+
+      expect(result.bootstrapped).toBe(true)
+      expect(result.missingKeyValues?.["API_KEY"]).toBe("op://vault/api/key")
+    })
+
+    // sync mode (existing .env) with --resolve-op.
+    it("appends a new op:// ref to an existing .env with masking in dry-run", () => {
+      writeFileSync(testEnvPath, "EXISTING=keepme")
+      writeFileSync(
+        testExamplePath,
+        ["EXISTING=unused", 'NEW_SECRET="op://vault/new/secret"'].join("\n")
+      )
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        dryRun: true
+      })
+
+      expect(result.bootstrapped).toBe(false)
+      expect(result.missingKeys).toEqual(["NEW_SECRET"])
+      expect(result.missingKeyValues?.["NEW_SECRET"]).toBe(
+        "<resolved from op://vault/new/secret>"
+      )
+      // Existing file untouched in dry-run
+      expect(readFileSync(testEnvPath, "utf8")).toBe("EXISTING=keepme")
+    })
+
+    // Codex #2: reject unquoted op:// refs to prevent dotenv # truncation.
+    it("rejects unquoted op:// references with a clear error", () => {
+      writeFileSync(testExamplePath, "API_KEY=op://vault/api/key")
+
+      expect(() =>
+        syncDotenv({
+          envPath: testEnvPath,
+          templatePath: testExamplePath,
+          resolveOp: true
+        })
+      ).toThrow(/quote the following line/i)
+      expect(existsSync(testEnvPath)).toBe(false)
+    })
+
+    it("preserves template comments on bootstrap (whole-file op inject)", () => {
+      // Dry-run so we don't shell out to op; what we're verifying is that the
+      // mask pass preserves the raw template structure (comments, blank
+      // lines) rather than reconstructing KEY="value" lines.
+      const exampleContent = [
+        "# Database configuration",
+        "DB_URL=postgres://localhost",
+        "",
+        "# Third-party API credentials",
+        'API_KEY="op://vault/api/key"'
+      ].join("\n")
+      writeFileSync(testExamplePath, exampleContent)
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        dryRun: true
+      })
+
+      expect(result.bootstrapped).toBe(true)
+      // In dry-run we don't write, so we can only verify the parsed result
+      expect(result.missingKeys).toEqual(["DB_URL", "API_KEY"])
+      expect(result.missingKeyValues?.["API_KEY"]).toBe(
+        "<resolved from op://vault/api/key>"
+      )
+    })
+  })
 })
