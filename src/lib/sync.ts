@@ -3,9 +3,37 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { parse } from "dotenv"
 
 import { getValueForKey, type SetupResult, type SyncOptions } from "./common"
+import {
+  findUnquotedOpReferences,
+  hasOpReferences,
+  maskOpReferences,
+  spawnOpInject
+} from "./op"
 
 interface DetailedSetupResult extends SetupResult {
   missingKeyValues?: Record<string, string>
+}
+
+function resolveTemplateContent(
+  rawContent: string,
+  resolveOp: boolean,
+  dryRun?: boolean
+): string {
+  if (!resolveOp) return rawContent
+  if (!hasOpReferences(rawContent)) return rawContent
+
+  if (dryRun) {
+    return maskOpReferences(rawContent)
+  }
+
+  const unquoted = findUnquotedOpReferences(rawContent)
+  if (unquoted.length > 0) {
+    throw new Error(
+      `--resolve-op requires op:// references to be quoted so resolved values survive parsing. Quote the following line(s) in your template:\n${unquoted.map((line) => `  ${line}`).join("\n")}`
+    )
+  }
+
+  return spawnOpInject(rawContent)
 }
 
 function getKeysToProcess(
@@ -19,7 +47,6 @@ function getKeysToProcess(
       ? variables.filter((key) => allTemplateKeys.includes(key))
       : allTemplateKeys
 
-  // Filter out keys with empty values if skipEmptySourceValues is enabled
   if (skipEmptySourceValues) {
     keysToInclude = keysToInclude.filter(
       (key) => templateParsed[key] && templateParsed[key].trim() !== ""
@@ -48,7 +75,6 @@ function bootstrapEnvFile(
     return
   }
 
-  // Copy template content as-is without modifying existing format
   writeFileSync(envPath, templateContent)
 }
 
@@ -73,13 +99,18 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     variables,
     dryRun,
     overwriteEmptyValues = true,
-    skipEmptySourceValues = false
+    skipEmptySourceValues = false,
+    resolveOp = false
   } = options
 
-  const templateContent = readFileSync(templatePath, "utf8")
+  const rawTemplateContent = readFileSync(templatePath, "utf8")
+  const templateContent = resolveTemplateContent(
+    rawTemplateContent,
+    resolveOp,
+    dryRun
+  )
   const templateParsed = parse(templateContent)
 
-  // Handle bootstrap case (no .env file exists)
   if (!existsSync(envPath)) {
     const keysToBootstrap = getKeysToProcess(
       templateParsed,
@@ -113,7 +144,6 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     }
   }
 
-  // Handle sync case (.env file exists)
   const current = parse(readFileSync(envPath, "utf8"))
   const availableKeys = getKeysToProcess(
     templateParsed,
@@ -121,20 +151,16 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     skipEmptySourceValues
   )
 
-  // Filter keys to sync based on missing keys and empty value overwrite logic
   const missingKeys = availableKeys.filter((key) => {
-    if (!(key in current)) {
-      return true // Key doesn't exist, add it
-    }
+    if (!(key in current)) return true
 
-    // Key exists - check if we should overwrite empty values
     if (
       overwriteEmptyValues &&
       current[key] === "" &&
       templateParsed[key] &&
       templateParsed[key].trim() !== ""
     ) {
-      return true // Overwrite empty value with non-empty template value
+      return true
     }
 
     return false

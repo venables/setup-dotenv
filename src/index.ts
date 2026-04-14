@@ -41,6 +41,10 @@ program
     "--skip-empty-source-values",
     "skip variables with empty values in source file (default: include)"
   )
+  .option(
+    "--resolve-op",
+    "resolve op:// references in source file via the 1Password CLI (requires `op` on PATH)"
+  )
   .action(
     (options: {
       target: string
@@ -49,6 +53,7 @@ program
       dryRun?: boolean
       overwriteEmptyValues?: boolean
       skipEmptySourceValues?: boolean
+      resolveOp?: boolean
     }) => {
       try {
         const result = syncDotenv({
@@ -57,7 +62,8 @@ program
           variables: options.only,
           dryRun: options.dryRun,
           overwriteEmptyValues: options.overwriteEmptyValues,
-          skipEmptySourceValues: options.skipEmptySourceValues
+          skipEmptySourceValues: options.skipEmptySourceValues,
+          resolveOp: options.resolveOp
         })
 
         if (options.dryRun) {

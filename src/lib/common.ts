@@ -7,6 +7,7 @@ export interface SyncOptions {
   dryRun?: boolean
   overwriteEmptyValues?: boolean
   skipEmptySourceValues?: boolean
+  resolveOp?: boolean
 }
 
 export interface GenerateOptions {
