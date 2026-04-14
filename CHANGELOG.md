@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## 3.0.0
+
 **Breaking changes**
 
 - Remove the `--only <vars...>` flag from `sync`. The common case it covered
