@@ -118,76 +118,6 @@ describe("syncDotenv", () => {
     expect(result.missingKeys).toEqual(["DB_URL"])
   })
 
-  it("only copies specified variables when provided", () => {
-    writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(
-      testExamplePath,
-      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000"
-    )
-
-    const result = syncDotenv({
-      envPath: testEnvPath,
-      templatePath: testExamplePath,
-      variables: ["DB_URL", "PORT"]
-    })
-
-    expect(result.bootstrapped).toBe(false)
-    expect(result.missingCount).toBe(2)
-    expect(result.missingKeys).toEqual(["DB_URL", "PORT"])
-
-    const envContent = readFileSync(testEnvPath, "utf8")
-    expect(envContent).toContain("API_KEY=my_key")
-    expect(envContent).toContain('DB_URL="postgres://localhost"')
-    expect(envContent).toContain('PORT="3000"')
-    expect(envContent).not.toContain("DEBUG=true")
-  })
-
-  it("bootstraps with only specified variables", () => {
-    writeFileSync(
-      testExamplePath,
-      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000"
-    )
-
-    const result = syncDotenv({
-      envPath: testEnvPath,
-      templatePath: testExamplePath,
-      variables: ["API_KEY", "DB_URL"]
-    })
-
-    expect(result.bootstrapped).toBe(true)
-    expect(result.missingCount).toBe(2)
-    expect(result.missingKeys).toEqual(["API_KEY", "DB_URL"])
-
-    const envContent = readFileSync(testEnvPath, "utf8")
-    expect(envContent).toContain('API_KEY="example_key"')
-    expect(envContent).toContain('DB_URL="postgres://localhost"')
-    expect(envContent).not.toContain("DEBUG=true")
-    expect(envContent).not.toContain("PORT=3000")
-  })
-
-  it("handles non-existent variables gracefully", () => {
-    writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(
-      testExamplePath,
-      "API_KEY=example_key\nDB_URL=postgres://localhost"
-    )
-
-    const result = syncDotenv({
-      envPath: testEnvPath,
-      templatePath: testExamplePath,
-      variables: ["NON_EXISTENT", "DB_URL", "ALSO_MISSING"]
-    })
-
-    expect(result.bootstrapped).toBe(false)
-    expect(result.missingCount).toBe(1)
-    expect(result.missingKeys).toEqual(["DB_URL"])
-
-    const envContent = readFileSync(testEnvPath, "utf8")
-    expect(envContent).toContain('DB_URL="postgres://localhost"')
-    expect(envContent).not.toContain("NON_EXISTENT")
-    expect(envContent).not.toContain("ALSO_MISSING")
-  })
-
   it("shows what would be copied in dry run mode", () => {
     writeFileSync(testEnvPath, "API_KEY=my_key")
     writeFileSync(
@@ -230,29 +160,6 @@ describe("syncDotenv", () => {
 
     // File should not be created in dry run
     expect(existsSync(testEnvPath)).toBe(false)
-  })
-
-  it("shows filtered variables in dry run mode", () => {
-    writeFileSync(testEnvPath, "API_KEY=my_key")
-    writeFileSync(
-      testExamplePath,
-      "API_KEY=example_key\nDB_URL=postgres://localhost\nDEBUG=true\nPORT=3000"
-    )
-
-    const result = syncDotenv({
-      envPath: testEnvPath,
-      templatePath: testExamplePath,
-      variables: ["DB_URL", "PORT"],
-      dryRun: true
-    })
-
-    expect(result.bootstrapped).toBe(false)
-    expect(result.missingCount).toBe(2)
-    expect(result.missingKeys).toEqual(["DB_URL", "PORT"])
-
-    // File should not be modified in dry run
-    const envContent = readFileSync(testEnvPath, "utf8")
-    expect(envContent).toBe("API_KEY=my_key")
   })
 
   it("overwrites empty values by default when source has non-empty value", () => {

@@ -31,7 +31,6 @@ program
     "source file to sync from (e.g., .env.example)",
     ".env.example"
   )
-  .option("--only <variables...>", "only copy these specific variables")
   .option("--dry-run", "show what would be copied without making changes")
   .option(
     "--no-overwrite-empty-values",
@@ -49,7 +48,6 @@ program
     (options: {
       target: string
       source: string
-      only?: string[]
       dryRun?: boolean
       overwriteEmptyValues?: boolean
       skipEmptySourceValues?: boolean
@@ -59,7 +57,6 @@ program
         const result = syncDotenv({
           envPath: options.target,
           templatePath: options.source,
-          variables: options.only,
           dryRun: options.dryRun,
           overwriteEmptyValues: options.overwriteEmptyValues,
           skipEmptySourceValues: options.skipEmptySourceValues,

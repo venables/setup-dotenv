@@ -28,7 +28,6 @@ Copies missing variables from a template file to your `.env`.
 ```bash
 setup-dotenv sync                                        # .env.example -> .env
 setup-dotenv sync -s .env.local.example -t .env.local    # custom paths
-setup-dotenv sync --only API_KEY DB_URL                  # specific variables
 setup-dotenv sync --resolve-op                           # resolve op:// refs via 1Password CLI
 setup-dotenv sync --dry-run                              # preview changes
 ```
@@ -37,7 +36,6 @@ setup-dotenv sync --dry-run                              # preview changes
 | ----------------------------- | --------------------------------- | -------------- |
 | `-s, --source <path>`         | Source template file              | `.env.example` |
 | `-t, --target <path>`         | Target env file                   | `.env`         |
-| `--only <vars...>`            | Only sync these variables         | all            |
 | `--no-overwrite-empty-values` | Keep empty values in target       | overwrite      |
 | `--skip-empty-source-values`  | Skip empty values in source       | include        |
 | `--resolve-op`                | Resolve `op://` refs via `op` CLI |                |
