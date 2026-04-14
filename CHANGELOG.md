@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+**Breaking changes**
+
+- Remove the `--only <vars...>` flag from `sync`. The common case it covered
+  ("add just this new key from the template") is already handled by plain
+  `sync`, which only adds missing keys. For one-off subset bootstrap, edit the
+  resulting `.env` after the fact.
+
+**New features**
+
 - Add `--resolve-op` flag to `sync` that pipes the template through the
   1Password CLI's `op inject` before syncing. Opt-in, streams via stdin/stdout
   (no temp files), preserves template comments and formatting, and masks values

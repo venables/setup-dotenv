@@ -38,22 +38,14 @@ function resolveTemplateContent(
 
 function getKeysToProcess(
   templateParsed: Record<string, string>,
-  variables?: string[],
   skipEmptySourceValues?: boolean
 ): string[] {
   const allTemplateKeys = Object.keys(templateParsed)
-  let keysToInclude =
-    variables && variables.length > 0
-      ? variables.filter((key) => allTemplateKeys.includes(key))
-      : allTemplateKeys
+  if (!skipEmptySourceValues) return allTemplateKeys
 
-  if (skipEmptySourceValues) {
-    keysToInclude = keysToInclude.filter(
-      (key) => templateParsed[key] && templateParsed[key].trim() !== ""
-    )
-  }
-
-  return keysToInclude
+  return allTemplateKeys.filter(
+    (key) => templateParsed[key] && templateParsed[key].trim() !== ""
+  )
 }
 
 function bootstrapEnvFile(
@@ -61,13 +53,12 @@ function bootstrapEnvFile(
   templateContent: string,
   templateParsed: Record<string, string>,
   keysToBootstrap: string[],
-  variables?: string[],
   dryRun?: boolean,
   skipEmptySourceValues?: boolean
 ): void {
   if (dryRun) return
 
-  if ((variables && variables.length > 0) || skipEmptySourceValues) {
+  if (skipEmptySourceValues) {
     const filteredLines = keysToBootstrap.map(
       (key) => `${key}="${getValueForKey(key, templateParsed)}"`
     )
@@ -96,7 +87,6 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
   const {
     envPath,
     templatePath,
-    variables,
     dryRun,
     overwriteEmptyValues = true,
     skipEmptySourceValues = false,
@@ -114,7 +104,6 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
   if (!existsSync(envPath)) {
     const keysToBootstrap = getKeysToProcess(
       templateParsed,
-      variables,
       skipEmptySourceValues
     )
 
@@ -123,7 +112,6 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
       templateContent,
       templateParsed,
       keysToBootstrap,
-      variables,
       dryRun,
       skipEmptySourceValues
     )
@@ -145,11 +133,7 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
   }
 
   const current = parse(readFileSync(envPath, "utf8"))
-  const availableKeys = getKeysToProcess(
-    templateParsed,
-    variables,
-    skipEmptySourceValues
-  )
+  const availableKeys = getKeysToProcess(templateParsed, skipEmptySourceValues)
 
   const missingKeys = availableKeys.filter((key) => {
     if (!(key in current)) return true

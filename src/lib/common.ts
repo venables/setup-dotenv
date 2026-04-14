@@ -3,7 +3,6 @@ import { randomBytes } from "node:crypto"
 export interface SyncOptions {
   envPath: string
   templatePath: string
-  variables?: string[]
   dryRun?: boolean
   overwriteEmptyValues?: boolean
   skipEmptySourceValues?: boolean

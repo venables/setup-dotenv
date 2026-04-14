@@ -42,9 +42,6 @@ setup-dotenv sync
 # Sync with custom paths
 setup-dotenv sync --source .env.local.example --target .env.local
 
-# Sync only specific variables
-setup-dotenv sync --only API_KEY DB_URL
-
 # Don't overwrite existing empty values in target file
 setup-dotenv sync --no-overwrite-empty-values
 
@@ -87,8 +84,8 @@ random values for secrets.
 
 - CLI interface using Commander.js with subcommands
 - **`sync` command**: Syncs environment variables from template to .env file
-  - Options: `--target`, `--source`, `--only`, `--dry-run`,
-    `--no-overwrite-empty-values`, `--skip-empty-source-values`
+  - Options: `--target`, `--source`, `--dry-run`, `--no-overwrite-empty-values`,
+    `--skip-empty-source-values`
   - By default, overwrites empty string values in target file when source has
     non-empty values
   - Use `--no-overwrite-empty-values` to preserve existing empty values in
@@ -118,7 +115,7 @@ random values for secrets.
   1. **Bootstrap mode**: Creates new .env file when none exists
   2. **Sync mode**: Appends missing variables to existing .env file and
      optionally overwrites empty values
-- `getKeysToProcess()` - Filters variables based on --only option and
+- `getKeysToProcess()` - Filters variables based on the
   --skip-empty-source-values flag
 - `bootstrapEnvFile()` - Creates new .env files
 - `appendMissingVariables()` - Adds missing vars to existing files
@@ -144,8 +141,6 @@ All modules use `dotenv` package for parsing environment files and Node.js
 - **Early returns** in helper functions to reduce nesting
 - **Functional decomposition** - each helper does one thing
 - **Dry-run support** - all file operations respect the dryRun flag
-- **Variable filtering** - `--only` option works in both bootstrap and sync
-  modes
 - **Clean separation** - `sync` only handles template copying, `secret` only
   handles random value creation
 - **Independent commands** - each command has a single, clear responsibility
@@ -160,7 +155,7 @@ to the version number and add a fresh `## Unreleased` section above it.
 
 - Test descriptions use assertive language: "handles X" not "should handle X"
 - **`sync.test.ts`** - Tests sync functionality covering both bootstrap and sync
-  modes, variable filtering (`--only`), and dry-run scenarios
+  modes, empty-value handling, and dry-run scenarios
 - **`secret.test.ts`** - Tests secret command functionality including file
   creation, appending, length parameter, and dry-run mode
 - Tests verify random hex generation produces 64-character values
