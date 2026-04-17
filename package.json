@@ -1,6 +1,6 @@
 {
   "name": "setup-dotenv",
-  "version": "3.0.1",
+  "version": "4.0.0",
   "description": "A CLI tool for setting up and managing .env files.",
   "keywords": [
     "dotenv",

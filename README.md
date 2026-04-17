@@ -1,7 +1,7 @@
 # setup-dotenv
 
-Sync `.env.example` to `.env` and generate secrets -- so new contributors can
-get running in seconds.
+Sync `.env.example` to `.env` and set individual variables -- so new
+contributors can get running in seconds.
 
 ## Install
 
@@ -15,8 +15,11 @@ npm install -g setup-dotenv
 # Copy .env.example to .env (won't overwrite existing values)
 setup-dotenv sync
 
-# Generate random secrets
-setup-dotenv secret AUTH_SECRET JWT_SECRET
+# Set a secret if not already present
+setup-dotenv set AUTH_SECRET $(openssl rand -base64 32)
+
+# Resolve op:// references via the 1Password CLI
+setup-dotenv sync --resolve-op
 ```
 
 ## Commands
@@ -29,17 +32,19 @@ Copies missing variables from a template file to your `.env`.
 setup-dotenv sync                                        # .env.example -> .env
 setup-dotenv sync -s .env.local.example -t .env.local    # custom paths
 setup-dotenv sync --resolve-op                           # resolve op:// refs via 1Password CLI
+setup-dotenv sync --refresh-op                           # re-resolve op:// refs, overwriting existing values
 setup-dotenv sync --dry-run                              # preview changes
 ```
 
-| Flag                          | Description                       | Default        |
-| ----------------------------- | --------------------------------- | -------------- |
-| `-s, --source <path>`         | Source template file              | `.env.example` |
-| `-t, --target <path>`         | Target env file                   | `.env`         |
-| `--no-overwrite-empty-values` | Keep empty values in target       | overwrite      |
-| `--skip-empty-source-values`  | Skip empty values in source       | include        |
-| `--resolve-op`                | Resolve `op://` refs via `op` CLI |                |
-| `--dry-run`                   | Preview without writing           |                |
+| Flag                          | Description                                          | Default        |
+| ----------------------------- | ---------------------------------------------------- | -------------- |
+| `-s, --source <path>`         | Source template file                                 | `.env.example` |
+| `-t, --target <path>`         | Target env file                                      | `.env`         |
+| `--no-overwrite-empty-values` | Keep empty values in target                          | overwrite      |
+| `--skip-empty-source-values`  | Skip empty values in source                          | include        |
+| `--resolve-op`                | Resolve `op://` refs via `op` CLI                    |                |
+| `--refresh-op`                | Re-resolve `op://` refs, overwriting existing values |                |
+| `--dry-run`                   | Preview without writing                              |                |
 
 #### `--resolve-op` (1Password CLI)
 
@@ -67,9 +72,7 @@ setup-dotenv sync --resolve-op
 ```
 
 - **Opt-in.** Templates without any `op://` refs are a no-op even when the flag
-  is set — safe to alias as a default.
-- **No temp files.** Content streams through `op inject` via stdin/stdout;
-  resolved secrets never touch disk except as the final `.env` write.
+  is set -- safe to alias as a default.
 - **Dry-run masks values.** `sync --resolve-op --dry-run` shows
   `<resolved from op://...>` so previews never leak plaintext secrets to the
   terminal, shell history, or CI logs.
@@ -78,29 +81,56 @@ setup-dotenv sync --resolve-op
   new `op://` key to the template and you want to pull in just that one without
   losing your local edits.
 - **Quoting required.** `op://` refs must be surrounded by `"` or `'` in the
-  template. Unquoted refs are rejected with a clear error — this prevents
+  template. Unquoted refs are rejected with a clear error -- this prevents
   `dotenv`'s `#`-comment parsing from silently truncating any resolved value
   containing a `#`.
 
-### `secret`
+#### `--refresh-op` (force re-resolution)
 
-Generates cryptographically secure random values (base64url by default).
+When a 1Password secret has rotated, your local `.env` goes stale: the resolved
+value from an earlier `sync` is a normal non-empty value, so regular
+`sync --resolve-op` won't touch it. `--refresh-op` force-overwrites any key
+whose raw template value is an `op://` reference, re-resolving it from
+1Password.
 
 ```bash
-setup-dotenv secret AUTH_SECRET JWT_SECRET    # write to .env
-setup-dotenv secret AUTH_SECRET --force       # overwrite existing value
-setup-dotenv secret AUTH_SECRET --hex         # hex instead of base64url
-setup-dotenv secret AUTH_SECRET -l 16         # custom length (bytes)
-setup-dotenv secret                           # print a raw secret to stdout
+setup-dotenv sync --refresh-op
 ```
 
-| Flag                   | Description                       | Default |
-| ---------------------- | --------------------------------- | ------- |
-| `-t, --target <path>`  | Target env file                   | `.env`  |
-| `-l, --length <bytes>` | Length in bytes                   | `32`    |
-| `--hex`                | Hex encoding instead of base64url |         |
-| `-f, --force`          | Overwrite existing values         | skip    |
-| `--dry-run`            | Preview without writing           |         |
+- **Implies `--resolve-op`.** You don't need to pass both.
+- **Only touches `op://` keys.** Non-op keys keep their existing values.
+- **Will trigger a 1Password auth prompt** (fingerprint / password) if your
+  session isn't active.
+
+### `set`
+
+Sets a single environment variable if not already present. The value can come
+from any source -- shell commands, literals, or 1Password `op://` references.
+
+```bash
+setup-dotenv set AUTH_SECRET $(openssl rand -base64 32)    # set if missing
+setup-dotenv set AUTH_SECRET $(openssl rand -base64 32) -f # overwrite existing
+setup-dotenv set DB_URL postgres://localhost/mydb           # any value source
+setup-dotenv set DB_URL op://vault/db/url                   # resolve from 1Password
+setup-dotenv set AUTH_SECRET "my-value" -t .env.local       # custom target
+setup-dotenv set AUTH_SECRET "my-value" --dry-run           # preview
+```
+
+| Flag                  | Description               | Default |
+| --------------------- | ------------------------- | ------- |
+| `-t, --target <path>` | Target env file           | `.env`  |
+| `-f, --force`         | Overwrite existing values | skip    |
+| `--dry-run`           | Preview without writing   |         |
+
+Safe by default: if the key already exists (with any value, including empty),
+`set` skips it and logs a message. Use `--force` to overwrite.
+
+#### `op://` references
+
+When the value starts with `op://`, it's resolved via
+[`op read`](https://developer.1password.com/docs/cli/reference/commands/read/)
+before writing. The 1Password auth prompt is skipped entirely when the key
+already exists and `--force` isn't set.
 
 ## Typical Workflow
 
@@ -114,8 +144,9 @@ JWT_SECRET=
 ```
 
 ```bash
-setup-dotenv sync                        # copies template to .env
-setup-dotenv secret AUTH_SECRET JWT_SECRET  # fills in the secrets
+setup-dotenv sync
+setup-dotenv set AUTH_SECRET $(openssl rand -base64 32)
+setup-dotenv set JWT_SECRET $(openssl rand -base64 32)
 ```
 
 ## License

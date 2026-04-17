@@ -4,6 +4,7 @@ import { parse } from "dotenv"
 
 import { getValueForKey, type SetupResult, type SyncOptions } from "./common"
 import {
+  findOpReferenceKeys,
   findUnquotedOpReferences,
   hasOpReferences,
   maskOpReferences,
@@ -77,27 +78,41 @@ function bootstrapEnvFile(
 //   2 = `export ` prefix including trailing whitespace, or undefined
 //   3 = key
 //   4 = comment body starting at `#`, or undefined
-// The rebuilt line is `${m[1]}${m[2] ?? ""}${m[3]}="value"` with ` ${m[4]}`
-// appended when a comment was present. Whitespace around `=` is canonicalised
-// away, which is a minor cosmetic change but keeps the rebuild predictable.
 const EMPTY_VALUE_LINE =
   /^(\s*)(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:""|'')?\s*(#.*)?\s*$/
 
+// Matches any `KEY=value` line regardless of value contents. Used by
+// `--refresh-op` so we can rewrite lines whose key already has a resolved
+// value. Same capture-group layout as `EMPTY_VALUE_LINE`.
+const ANY_VALUE_LINE =
+  /^(\s*)(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s#]*)\s*(#.*)?\s*$/
+
 function formatLine(key: string, defaults: Record<string, string>): string {
   return `${key}="${getValueForKey(key, defaults)}"`
+}
+
+function rebuildLine(
+  match: RegExpMatchArray,
+  key: string,
+  defaults: Record<string, string>
+): string {
+  const indent = match[1] ?? ""
+  const exportPrefix = match[2] ?? ""
+  const comment = match[4] ? ` ${match[4]}` : ""
+  return `${indent}${exportPrefix}${formatLine(key, defaults)}${comment}`
 }
 
 function writeChanges(
   envPath: string,
   overwriteKeys: string[],
   newKeys: string[],
+  refreshKeys: string[],
   defaults: Record<string, string>,
   dryRun?: boolean
 ): void {
   if (dryRun) return
   if (overwriteKeys.length === 0 && newKeys.length === 0) return
 
-  // Fast path: no in-place rewrites needed, append new keys to end of file.
   if (overwriteKeys.length === 0) {
     const lines = newKeys.map((k) => formatLine(k, defaults))
     writeFileSync(envPath, `\n${lines.join("\n")}\n`, { flag: "a" })
@@ -110,39 +125,45 @@ function writeChanges(
   const bodyLines = hadTrailingNewline ? rawLines.slice(0, -1) : rawLines
 
   const overwriteSet = new Set(overwriteKeys)
+  const refreshSet = new Set(refreshKeys)
   const replaced = new Set<string>()
   const transformed: string[] = []
 
   for (const line of bodyLines) {
-    const match = line.match(EMPTY_VALUE_LINE)
-    const key = match?.[3]
-    if (!key || !overwriteSet.has(key)) {
+    // Refresh path: match any key=value line for a refresh key and rewrite.
+    if (refreshSet.size > 0) {
+      const anyMatch = line.match(ANY_VALUE_LINE)
+      const anyKey = anyMatch?.[3]
+      if (anyKey && refreshSet.has(anyKey)) {
+        if (replaced.has(anyKey)) continue
+        replaced.add(anyKey)
+        transformed.push(rebuildLine(anyMatch, anyKey, defaults))
+        continue
+      }
+    }
+
+    // Empty-value overwrite path: only rewrite if the current line matches the
+    // strict empty-value form. This protects non-refresh keys that may have
+    // been hand-edited to a meaningful value.
+    const emptyMatch = line.match(EMPTY_VALUE_LINE)
+    const emptyKey = emptyMatch?.[3]
+    if (!emptyKey || !overwriteSet.has(emptyKey) || refreshSet.has(emptyKey)) {
       transformed.push(line)
       continue
     }
-    // First empty line for this key becomes the new value; any subsequent
-    // empty lines for the same key are dropped so dotenv's last-occurrence
-    // rule can't clobber the value we just wrote.
-    if (replaced.has(key)) continue
-    replaced.add(key)
-    const indent = match[1] ?? ""
-    const exportPrefix = match[2] ?? ""
-    const comment = match[4] ? ` ${match[4]}` : ""
-    transformed.push(
-      `${indent}${exportPrefix}${formatLine(key, defaults)}${comment}`
-    )
+    if (replaced.has(emptyKey)) continue
+    replaced.add(emptyKey)
+    transformed.push(rebuildLine(emptyMatch, emptyKey, defaults))
   }
 
   const missedOverwrites = overwriteKeys.filter((k) => !replaced.has(k))
 
-  // Any key flagged for overwrite that we couldn't match as an empty line is
-  // an edge case our regex doesn't understand. We still have to write the
-  // value somewhere — appending is the least-bad option — but we warn loudly
-  // so the user notices the duplicate and can clean up by hand (or report it
-  // as a bug so the regex can be widened).
+  // Any key flagged for overwrite that we couldn't match is an edge case our
+  // regexes don't understand. Append it and warn loudly so the duplicate is
+  // visible.
   if (missedOverwrites.length > 0) {
     console.warn(
-      `warning: could not locate empty-value line(s) for ${missedOverwrites.join(", ")} in ${envPath}; appending at end of file. The original line(s) will remain and should be removed manually.`
+      `warning: could not locate line(s) for ${missedOverwrites.join(", ")} in ${envPath}; appending at end of file. The original line(s) will remain and should be removed manually.`
     )
   }
 
@@ -160,10 +181,18 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     dryRun,
     overwriteEmptyValues = true,
     skipEmptySourceValues = false,
-    resolveOp = false
+    resolveOp = false,
+    refreshOp = false
   } = options
 
   const rawTemplateContent = readFileSync(templatePath, "utf8")
+
+  // Capture op:// keys from the raw template before resolution, so refreshOp
+  // knows which keys to force-overwrite even when the target already has a
+  // resolved (non-empty) value.
+  const rawOpKeys =
+    refreshOp && resolveOp ? findOpReferenceKeys(rawTemplateContent) : []
+
   const templateContent = resolveTemplateContent(
     rawTemplateContent,
     resolveOp,
@@ -220,12 +249,31 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
     return false
   })
 
-  const overwriteKeys = missingKeys.filter((key) => key in current)
-  const newKeys = missingKeys.filter((key) => !(key in current))
+  // Keys whose raw template value was an op:// ref but which are already
+  // present (with any value) in the target. These get a force-overwrite.
+  const refreshKeys = refreshOp
+    ? rawOpKeys.filter(
+        (key) =>
+          key in current &&
+          !missingKeys.includes(key) &&
+          availableKeys.includes(key)
+      )
+    : []
 
-  writeChanges(envPath, overwriteKeys, newKeys, templateParsed, dryRun)
+  const allChangedKeys = [...missingKeys, ...refreshKeys]
+  const overwriteKeys = allChangedKeys.filter((key) => key in current)
+  const newKeys = allChangedKeys.filter((key) => !(key in current))
 
-  const missingKeyValues = missingKeys.reduce(
+  writeChanges(
+    envPath,
+    overwriteKeys,
+    newKeys,
+    refreshKeys,
+    templateParsed,
+    dryRun
+  )
+
+  const missingKeyValues = allChangedKeys.reduce(
     (acc, key) => {
       acc[key] = getValueForKey(key, templateParsed)
       return acc
@@ -235,8 +283,8 @@ export function syncDotenv(options: SyncOptions): DetailedSetupResult {
 
   return {
     bootstrapped: false,
-    missingCount: missingKeys.length,
-    missingKeys,
+    missingCount: allChangedKeys.length,
+    missingKeys: allChangedKeys,
     missingKeyValues
   }
 }

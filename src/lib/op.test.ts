@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test"
 
 import {
   classifyOpInjectError,
+  classifyOpReadError,
+  findOpReferenceKeys,
   findUnquotedOpReferences,
   hasOpReferences,
   maskOpReferences
@@ -82,6 +84,36 @@ describe("findUnquotedOpReferences", () => {
   })
 })
 
+describe("findOpReferenceKeys", () => {
+  it("returns keys whose quoted value is an op:// ref", () => {
+    const content = [
+      'API_KEY="op://vault/api/key"',
+      "DB_URL=postgres://localhost",
+      "JWT='op://vault/jwt'"
+    ].join("\n")
+    expect(findOpReferenceKeys(content)).toEqual(["API_KEY", "JWT"])
+  })
+
+  it("handles export prefixes and leading whitespace", () => {
+    const content = '  export API_KEY="op://vault/api/key"'
+    expect(findOpReferenceKeys(content)).toEqual(["API_KEY"])
+  })
+
+  it("ignores op:// references inside comments", () => {
+    const content = '# API_KEY="op://vault/api/key"'
+    expect(findOpReferenceKeys(content)).toEqual([])
+  })
+
+  it("ignores unquoted op:// values (those would be rejected anyway)", () => {
+    const content = "API_KEY=op://vault/api/key"
+    expect(findOpReferenceKeys(content)).toEqual([])
+  })
+
+  it("returns an empty array for content without op:// references", () => {
+    expect(findOpReferenceKeys("API_KEY=hardcoded\nPORT=3000")).toEqual([])
+  })
+})
+
 describe("maskOpReferences", () => {
   it("masks a single op:// reference", () => {
     expect(maskOpReferences('API_KEY="op://vault/item/field"')).toBe(
@@ -142,5 +174,43 @@ describe("classifyOpInjectError", () => {
   it("handles null exit status", () => {
     const msg = classifyOpInjectError(null, "process killed")
     expect(msg).toContain("unknown")
+  })
+})
+
+describe("classifyOpReadError", () => {
+  it("detects not-signed-in errors", () => {
+    const msg = classifyOpReadError(
+      1,
+      "[ERROR] You are not signed in to 1Password"
+    )
+    expect(msg).toContain("not signed in")
+    expect(msg).toContain("op signin")
+  })
+
+  it("detects unresolvable references", () => {
+    const msg = classifyOpReadError(
+      1,
+      'could not resolve "op://vault/item/field": no item found'
+    )
+    expect(msg).toContain("could not resolve")
+  })
+
+  it("detects invalid secret reference format", () => {
+    const msg = classifyOpReadError(1, '"foo" isn\'t a secret reference')
+    expect(msg).toContain("could not resolve")
+  })
+
+  it("falls back to generic failure message", () => {
+    const msg = classifyOpReadError(7, "unexpected error")
+    expect(msg).toContain("exit 7")
+    expect(msg).toContain("op read failed")
+  })
+
+  it("scrubs op:// references from stderr", () => {
+    const msg = classifyOpReadError(
+      1,
+      'could not resolve "op://vault/api/key": no item found'
+    )
+    expect(msg).toContain("<resolved from op://vault/api/key>")
   })
 })
