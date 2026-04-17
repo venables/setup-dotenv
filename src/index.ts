@@ -4,8 +4,8 @@ import process from "node:process"
 import { program } from "commander"
 
 import { version } from "../package.json" with { type: "json" }
-import { generateRandomValue } from "./lib/common"
-import { generateVariables } from "./lib/secret"
+import { maskOpReferences, spawnOpRead } from "./lib/op"
+import { existsInEnv, setValue } from "./lib/set"
 import { syncDotenv } from "./lib/sync"
 
 program
@@ -16,12 +16,11 @@ program
     "after",
     `
 Example:
-  $ setup-dotenv sync                  Copy .env.example to .env (safe: won't overwrite existing values)
-  $ setup-dotenv secret AUTH_SECRET    Generate a random value for AUTH_SECRET in .env
-  $ setup-dotenv secret                Print a random secret to stdout`
+  $ setup-dotenv sync                                         Copy .env.example to .env
+  $ setup-dotenv sync --resolve-op                            Resolve op:// references via 1Password
+  $ setup-dotenv set AUTH_SECRET $(openssl rand -base64 32)   Set a value if not already present`
   )
 
-// Sync command
 program
   .command("sync")
   .description("Sync environment variables from template to .env file")
@@ -44,6 +43,10 @@ program
     "--resolve-op",
     "resolve op:// references in source file via the 1Password CLI (requires `op` on PATH)"
   )
+  .option(
+    "--refresh-op",
+    "re-resolve op:// references, overwriting existing values in target (implies --resolve-op)"
+  )
   .action(
     (options: {
       target: string
@@ -52,15 +55,18 @@ program
       overwriteEmptyValues?: boolean
       skipEmptySourceValues?: boolean
       resolveOp?: boolean
+      refreshOp?: boolean
     }) => {
       try {
+        const resolveOp = options.resolveOp || options.refreshOp
         const result = syncDotenv({
           envPath: options.target,
           templatePath: options.source,
           dryRun: options.dryRun,
           overwriteEmptyValues: options.overwriteEmptyValues,
           skipEmptySourceValues: options.skipEmptySourceValues,
-          resolveOp: options.resolveOp
+          resolveOp,
+          refreshOp: options.refreshOp
         })
 
         if (options.dryRun) {
@@ -104,110 +110,72 @@ program
     }
   )
 
-// Secret command
+// Set command
 program
-  .command("secret")
-  .description("Generate random base64url values for environment variables")
-  .argument("[variables...]", "variable names to generate values for")
+  .command("set")
+  .description("Set a single environment variable if not already present")
+  .argument("<key>", "variable name to set")
+  .argument("<value>", "value to assign")
   .option("-t, --target <path>", "target .env file", ".env")
-  .option("-l, --length <bytes>", "length in bytes for generated values", "32")
-  .option("--hex", "use hex encoding instead of base64url")
-  .option("--dry-run", "show what would be generated without making changes")
-  .option("-f, --force", "overwrite existing values")
+  .option("-f, --force", "overwrite existing value")
+  .option("--dry-run", "show what would happen without making changes")
   .action(
     (
-      variables: string[],
+      key: string,
+      value: string,
       options: {
         target: string
-        length: string
-        hex?: boolean
         dryRun?: boolean
         force?: boolean
       }
     ) => {
       try {
-        const encoding = options.hex ? "hex" : "base64url"
-        const length = parseInt(options.length, 10)
+        const isOpRef = value.startsWith("op://")
 
-        if (variables.length === 0) {
-          process.stdout.write(`${generateRandomValue(length, encoding)}\n`)
+        // Skip 1Password auth when the key already exists and won't be
+        // overwritten. This avoids an unnecessary fingerprint prompt.
+        if (isOpRef && !options.force && existsInEnv(options.target, key)) {
+          if (options.dryRun) {
+            console.log(
+              `[DRY RUN] ${key} already exists in ${options.target} – skipping (use --force to overwrite)`
+            )
+          } else {
+            console.log(
+              `${key} already exists in ${options.target} – skipping (use --force to overwrite)`
+            )
+          }
           return
         }
 
-        const result = generateVariables({
+        const resolvedValue = isOpRef
+          ? options.dryRun
+            ? maskOpReferences(value)
+            : spawnOpRead(value)
+          : value
+
+        const result = setValue({
           envPath: options.target,
-          variables,
-          length,
-          encoding,
+          key,
+          value: resolvedValue,
           dryRun: options.dryRun,
           force: options.force
         })
 
-        if (options.dryRun) {
-          if (result.bootstrapped) {
-            console.log(
-              `[DRY RUN] Would create ${options.target} with generated values:`
-            )
-            result.missingKeys.forEach((key) => {
-              const value = result.missingKeyValues?.[key] || ""
-              console.log(`  ${key}="${value}"`)
-            })
-          } else if (result.missingKeys.length === 0) {
-            console.log(
-              `[DRY RUN] All variables already exist in ${options.target} – nothing to do.`
-            )
-            if (!options.force) {
-              console.log(
-                `[DRY RUN] Use -f or --force to overwrite existing values.`
-              )
+        const prefix = options.dryRun ? "[DRY RUN] " : ""
+        const messages: Record<typeof result.status, string> = options.dryRun
+          ? {
+              created: `Would create ${options.target} with ${key}`,
+              appended: `Would set ${key} in ${options.target}`,
+              overwrote: `Would overwrite ${key} in ${options.target}`,
+              skipped: `${key} already exists in ${options.target} – skipping (use --force to overwrite)`
             }
-          } else if (result.missingKeys.length < variables.length) {
-            const existing = variables.filter(
-              (v) => !result.missingKeys.includes(v)
-            )
-            console.log(`[DRY RUN] Would generate values for:`)
-            result.missingKeys.forEach((key) => {
-              const value = result.missingKeyValues?.[key] || ""
-              console.log(`  ${key}="${value}"`)
-            })
-            console.log(
-              `[DRY RUN] Already exist (skipping): ${existing.join(", ")}`
-            )
-          } else {
-            console.log(`[DRY RUN] Would generate values for:`)
-            result.missingKeys.forEach((key) => {
-              const value = result.missingKeyValues?.[key] || ""
-              console.log(`  ${key}="${value}"`)
-            })
-          }
-        } else {
-          if (result.bootstrapped) {
-            console.log(
-              `Created ${options.target} with generated values for: ${variables.join(", ")}`
-            )
-          } else if (result.missingKeys.length === 0) {
-            console.log(
-              `All variables already exist in ${options.target} – nothing to do.`
-            )
-            if (!options.force) {
-              console.log(`Use -f or --force to overwrite existing values.`)
+          : {
+              created: `Created ${options.target} with ${key}`,
+              appended: `Set ${key} in ${options.target}`,
+              overwrote: `Overwrote ${key} in ${options.target}`,
+              skipped: `${key} already exists in ${options.target} – skipping (use --force to overwrite)`
             }
-          } else if (result.missingKeys.length < variables.length) {
-            const existing = variables.filter(
-              (v) => !result.missingKeys.includes(v)
-            )
-            console.log(
-              `Generated values for: ${result.missingKeys.join(", ")}`
-            )
-            if (!options.force) {
-              console.log(`Already exist (skipped): ${existing.join(", ")}`)
-            }
-          } else {
-            console.log(
-              `Generated values for: ${result.missingKeys.join(", ")}`
-            )
-          }
-        }
+        console.log(`${prefix}${messages[result.status]}`)
       } catch (error) {
         console.error("Error:", error instanceof Error ? error.message : error)
         process.exit(1)

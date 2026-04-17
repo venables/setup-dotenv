@@ -473,4 +473,64 @@ describe("syncDotenv", () => {
       )
     })
   })
+
+  describe("--refresh-op", () => {
+    it("force-overwrites resolved op:// values in dry-run", () => {
+      writeFileSync(testEnvPath, 'NAME="Matt"\nKEEP=value')
+      writeFileSync(
+        testExamplePath,
+        ['NAME="op://vault/person/name"', "KEEP=ignored"].join("\n")
+      )
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        refreshOp: true,
+        dryRun: true
+      })
+
+      expect(result.missingKeys).toContain("NAME")
+      expect(result.missingKeys).not.toContain("KEEP")
+      expect(result.missingKeyValues?.["NAME"]).toBe(
+        "<resolved from op://vault/person/name>"
+      )
+      expect(readFileSync(testEnvPath, "utf8")).toBe('NAME="Matt"\nKEEP=value')
+    })
+
+    it("leaves non-op keys untouched during refresh", () => {
+      writeFileSync(testEnvPath, 'NAME="Matt"\nDB_URL=postgres://prod')
+      writeFileSync(
+        testExamplePath,
+        ['NAME="op://vault/person/name"', "DB_URL=postgres://localhost"].join(
+          "\n"
+        )
+      )
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        refreshOp: true,
+        dryRun: true
+      })
+
+      expect(result.missingKeys).toEqual(["NAME"])
+    })
+
+    it("does not refresh op:// keys without the flag", () => {
+      writeFileSync(testEnvPath, 'NAME="Matt"')
+      writeFileSync(testExamplePath, 'NAME="op://vault/person/name"')
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        dryRun: true
+      })
+
+      expect(result.missingCount).toBe(0)
+      expect(result.missingKeys).toEqual([])
+    })
+  })
 })

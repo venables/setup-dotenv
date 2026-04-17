@@ -51,99 +51,102 @@ setup-dotenv sync --skip-empty-source-values
 # Combine both flags
 setup-dotenv sync --no-overwrite-empty-values --skip-empty-source-values
 
-# Generate random values for variables
-setup-dotenv secret AUTH_SECRET JWT_SECRET SESSION_KEY
+# Resolve op:// references via the 1Password CLI
+setup-dotenv sync --resolve-op
 
-# Generate to a specific file
-setup-dotenv secret AUTH_SECRET --target .env.local
-
-# Generate with custom length (in bytes)
-setup-dotenv secret AUTH_SECRET --length 16
-
-# Force overwrite existing values
-setup-dotenv secret AUTH_SECRET --force
-
-# Use short flags
-setup-dotenv secret AUTH_SECRET -t .env.local -l 16 -f
+# Re-resolve op:// references after a rotation (overwrites existing values)
+setup-dotenv sync --refresh-op
 
 # Dry run to see what would happen
 setup-dotenv sync --dry-run
-setup-dotenv secret AUTH_SECRET --dry-run
+
+# Set a single variable (skips if already present)
+setup-dotenv set AUTH_SECRET $(openssl rand -base64 32)
+
+# Set from 1Password (resolved via `op read`)
+setup-dotenv set DB_URL op://vault/db/url
+
+# Force overwrite an existing value
+setup-dotenv set AUTH_SECRET $(openssl rand -base64 32) --force
 ```
 
 ## Architecture
 
-This is a TypeScript CLI toolkit that provides commands for managing environment
-variables and dotenv files. It can sync variables between template files (like
-`.env.example`) and actual environment files (like `.env`), as well as generate
-random values for secrets.
+This is a TypeScript CLI toolkit that syncs variables from a template file (like
+`.env.example`) into a target env file (like `.env`). It can optionally resolve
+1Password `op://` references and set individual variables from any value source.
 
 ### Core Components
 
 **Entry Point (`src/index.ts`)**
 
-- CLI interface using Commander.js with subcommands
+- CLI interface using Commander.js with two subcommands: `sync` and `set`
 - **`sync` command**: Syncs environment variables from template to .env file
   - Options: `--target`, `--source`, `--dry-run`, `--no-overwrite-empty-values`,
-    `--skip-empty-source-values`
+    `--skip-empty-source-values`, `--resolve-op`, `--refresh-op`
   - By default, overwrites empty string values in target file when source has
     non-empty values
-  - Use `--no-overwrite-empty-values` to preserve existing empty values in
-    target file
-  - Use `--skip-empty-source-values` to exclude variables with empty values from
-    source file
-- **`secret` command**: Generates random hex values for specific environment
-  variables
-  - Arguments: variable names to generate
-  - Options: `--target`, `--length`, `--force`, `--dry-run`
+  - `--refresh-op` implies `--resolve-op`
+- **`set` command**: Sets a single variable if not already present
+  - Arguments: key and value
+  - Options: `--target`, `--force`, `--dry-run`
+  - Skips if key exists (any value, including empty) unless `--force` is used
 - Handles output formatting for different modes (normal vs dry-run)
-- Safe by default: won't overwrite existing values unless `--force` is used
 - Error handling and process exit codes
 
 **Core Logic**
 
 **`src/lib/common.ts`** - Shared utilities and types:
 
-- `generateRandomHex()` - Creates 64-character random hex values using Node.js
-  crypto
 - `getValueForKey()` - Gets variable value from template
-- `SyncOptions`, `GenerateOptions`, and `SetupResult` interfaces
+- `SyncOptions`, `SetupResult` interfaces
 
-**`src/lib/sync.ts`** - Sync command logic:
+**`src/lib/sync.ts`** - Main sync logic:
 
-- `syncDotenv()` - Main sync function with two operation modes:
+- `syncDotenv()` - Two operation modes:
   1. **Bootstrap mode**: Creates new .env file when none exists
-  2. **Sync mode**: Appends missing variables to existing .env file and
-     optionally overwrites empty values
-- `getKeysToProcess()` - Filters variables based on the
-  --skip-empty-source-values flag
-- `bootstrapEnvFile()` - Creates new .env files
-- `appendMissingVariables()` - Adds missing vars to existing files
-- **Empty value handling**: By default overwrites empty string values ("") in
-  target when source has non-empty values
-- **Source filtering**: Can skip variables with empty values in source file when
-  --skip-empty-source-values is enabled
+  2. **Sync mode**: Adds missing variables and optionally overwrites empty
+     values, preserving comments and ordering via in-place line rewrites
+- `resolveTemplateContent()` - Routes the template through `op inject` when
+  `--resolve-op` is set (or masks values in dry-run)
+- **Refresh-op path**: Captures `op://` keys from the raw template before
+  resolution; after resolution, force-rewrites matching keys in-place via the
+  `ANY_VALUE_LINE` regex
 
-**`src/lib/secret.ts`** - Secret command logic:
+**`src/lib/set.ts`** - Set command logic:
 
-- `generateVariables()` - Generate random hex values for specified variables
-  with smart existing value handling (supports custom length parameter)
-- Checks existing .env files and skips variables that already exist (unless
-  `--force` is used)
-- Force mode removes existing values and replaces them with newly generated ones
-- Handles both new file creation and appending to existing files
+- `setValue()` - Writes `KEY="VALUE"` to .env if key is not present
+- `existsInEnv()` - Checks if a key exists in a .env file (used to avoid
+  unnecessary 1Password auth when the key would be skipped)
+- Creates the file if it doesn't exist, appends if key is missing, replaces
+  in-place with `--force`
 
-All modules use `dotenv` package for parsing environment files and Node.js
-`crypto.randomBytes()` for secure random generation.
+**`src/lib/op.ts`** - 1Password CLI integration:
+
+- `hasOpReferences()` / `findUnquotedOpReferences()` / `findOpReferenceKeys()` -
+  Static analysis of raw template for op:// refs
+- `spawnOpInject()` - Shells out to `op inject -i <tmpfile>`; the temp file
+  holds only references (pointers, not resolved secrets) and is removed
+  unconditionally
+- `spawnOpRead()` - Shells out to `op read` for single-value resolution (used by
+  the `set` command when the value starts with `op://`)
+- `classifyOpInjectError()` / `classifyOpReadError()` - Map `op` exit status +
+  stderr to user-friendly messages, scrubbing any op:// refs from surfaced
+  output
+
+All modules use `dotenv` package for parsing environment files.
 
 ### Key Design Patterns
 
 - **Early returns** in helper functions to reduce nesting
 - **Functional decomposition** - each helper does one thing
 - **Dry-run support** - all file operations respect the dryRun flag
-- **Clean separation** - `sync` only handles template copying, `secret` only
-  handles random value creation
-- **Independent commands** - each command has a single, clear responsibility
+- **Shared line rebuild** - both empty-value overwrite and refresh-op paths use
+  the same `rebuildLine()` + capture-group layout, differing only in which regex
+  they use to match the candidate line
+- **Raw-then-resolved** - op:// key tracking happens on the raw template so
+  refresh-op knows which keys to force-overwrite even when the target already
+  has a resolved value
 
 ### Changelog
 
@@ -154,11 +157,11 @@ to the version number and add a fresh `## Unreleased` section above it.
 ### Test Conventions
 
 - Test descriptions use assertive language: "handles X" not "should handle X"
-- **`sync.test.ts`** - Tests sync functionality covering both bootstrap and sync
-  modes, empty-value handling, and dry-run scenarios
-- **`secret.test.ts`** - Tests secret command functionality including file
-  creation, appending, length parameter, and dry-run mode
-- Tests verify random hex generation produces 64-character values
+- **`sync.test.ts`** - Tests sync functionality covering bootstrap, sync mode,
+  empty-value handling, `--resolve-op`, `--refresh-op`, and dry-run scenarios
+- **`set.test.ts`** - Tests set command: create, append, skip, force, dry-run
+- **`op.test.ts`** - Tests op:// detection, key extraction, masking, and error
+  classification (does not shell out to `op`)
 - Comprehensive dry-run testing ensures no file modifications
 - Tests clean up temporary files in beforeEach/afterEach hooks
 

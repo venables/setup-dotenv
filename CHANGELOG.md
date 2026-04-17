@@ -4,6 +4,26 @@
 
 Nothing yet.
 
+## 4.0.0
+
+**Breaking changes**
+
+- Remove the `secret` command. Use the new `set` command with any value source
+  instead, e.g. `setup-dotenv set AUTH_SECRET $(openssl rand -base64 32)`.
+
+**New features**
+
+- Add `set` command. Sets a single environment variable if not already present:
+  `setup-dotenv set KEY VALUE`. Skips if the key exists (any value, including
+  empty) and logs a message. Use `--force` to overwrite. Supports `--target` and
+  `--dry-run`. Values starting with `op://` are resolved via `op read`
+  (1Password CLI); the auth prompt is skipped when the key already exists and
+  `--force` isn't set.
+- Add `--refresh-op` flag to `sync`. Force-overwrites any key whose raw template
+  value is an `op://` reference, even if the target already has a resolved
+  value. Useful when a 1Password secret has rotated and the local `.env` is
+  stale. Implies `--resolve-op`.
+
 ## 3.0.1
 
 - Fix `sync --resolve-op` failing with `expected data on stdin but none found`
