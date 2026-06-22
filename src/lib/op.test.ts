@@ -4,7 +4,9 @@ import {
   classifyOpInjectError,
   findUnquotedOpReferences,
   hasOpReferences,
-  maskOpReferences
+  maskOpReferences,
+  protectCommentedOpReferences,
+  restoreProtectedComments
 } from "./op.js"
 
 describe("hasOpReferences", () => {
@@ -79,6 +81,94 @@ describe("findUnquotedOpReferences", () => {
       "API_KEY=op://vault/api/key",
       "SESSION=op://vault/session/secret"
     ])
+  })
+})
+
+describe("protectCommentedOpReferences", () => {
+  it("swaps a commented op:// line for a sentinel that carries no op:// ref", () => {
+    const content = '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"'
+    const { protectedContent, protectedLines } =
+      protectCommentedOpReferences(content)
+
+    expect(protectedContent).not.toContain("op://")
+    expect(protectedLines).toEqual([content])
+  })
+
+  it("leaves active op:// assignments in place so they still reach op inject", () => {
+    const content = [
+      '# COMMENTED="op://Dev/item/field"',
+      'API_KEY="op://vault/api/key"'
+    ].join("\n")
+    const { protectedContent } = protectCommentedOpReferences(content)
+
+    expect(protectedContent).toContain('API_KEY="op://vault/api/key"')
+    // The commented reference must not survive into the injected content.
+    expect(protectedContent).not.toContain("op://Dev/item/field")
+  })
+
+  it("protects indented comment lines, not just column-zero ones", () => {
+    const content = '   # NESTED="op://vault/item/field"'
+    const { protectedLines } = protectCommentedOpReferences(content)
+    expect(protectedLines).toEqual([content])
+  })
+
+  it("returns content untouched when no commented op:// refs exist", () => {
+    const content = 'DB_URL=postgres://localhost\nAPI_KEY="op://vault/api/key"'
+    const { protectedContent, protectedLines } =
+      protectCommentedOpReferences(content)
+
+    expect(protectedContent).toBe(content)
+    expect(protectedLines).toEqual([])
+  })
+
+  it("round-trips: restore after an identity inject returns the original", () => {
+    const content = [
+      '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+      "DATABASE_URL=postgres://localhost/app"
+    ].join("\n")
+    const { protectedContent, protectedLines } =
+      protectCommentedOpReferences(content)
+
+    // op inject leaves the sentinel (no op://) untouched.
+    expect(restoreProtectedComments(protectedContent, protectedLines)).toBe(
+      content
+    )
+  })
+
+  it("restores commented lines verbatim while active refs are resolved", () => {
+    const content = [
+      '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+      'API_KEY="op://vault/api/key"'
+    ].join("\n")
+    const { protectedContent, protectedLines } =
+      protectCommentedOpReferences(content)
+
+    // Simulate op inject resolving only the active reference.
+    const injected = protectedContent.replace(
+      '"op://vault/api/key"',
+      '"resolved-secret"'
+    )
+
+    expect(restoreProtectedComments(injected, protectedLines)).toBe(
+      [
+        '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+        'API_KEY="resolved-secret"'
+      ].join("\n")
+    )
+  })
+
+  it("preserves CRLF line endings on the protect path", () => {
+    const content = [
+      '# KMS_KEY_ID="op://Dev/item/field"',
+      "DATABASE_URL=postgres://localhost"
+    ].join("\r\n")
+    const { protectedContent, protectedLines } =
+      protectCommentedOpReferences(content)
+
+    expect(protectedContent).toContain("\r\n")
+    expect(restoreProtectedComments(protectedContent, protectedLines)).toBe(
+      content
+    )
   })
 })
 

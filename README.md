@@ -68,8 +68,10 @@ setup-dotenv sync --resolve-op
 
 - **Opt-in.** Templates without any `op://` refs are a no-op even when the flag
   is set — safe to alias as a default.
-- **No temp files.** Content streams through `op inject` via stdin/stdout;
-  resolved secrets never touch disk except as the final `.env` write.
+- **Secrets stay off disk.** The template is handed to `op inject` through a
+  private temp file that holds only `op://` pointers — never resolved secrets —
+  and is removed immediately after. Resolved secrets never touch disk except as
+  the final `.env` write.
 - **Dry-run masks values.** `sync --resolve-op --dry-run` shows
   `<resolved from op://...>` so previews never leak plaintext secrets to the
   terminal, shell history, or CI logs.
@@ -81,6 +83,10 @@ setup-dotenv sync --resolve-op
   template. Unquoted refs are rejected with a clear error — this prevents
   `dotenv`'s `#`-comment parsing from silently truncating any resolved value
   containing a `#`.
+- **Comments are left alone.** An `op://` ref on a commented-out line
+  (`# KEY="op://..."`) is never resolved — the referenced item doesn't need to
+  exist, and the secret is never injected into a comment. Only active
+  assignments are sent to `op inject`.
 
 ### `secret`
 

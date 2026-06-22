@@ -16,6 +16,11 @@ export function maskOpReferences(content: string): string {
   )
 }
 
+/** A whole-line dotenv comment: the first non-whitespace character is `#`. */
+function isCommentLine(line: string): boolean {
+  return line.trimStart().startsWith("#")
+}
+
 /**
  * Finds dotenv lines containing an unquoted `op://` reference. Unquoted refs
  * are rejected because after `op inject` substitutes the reference, any `#`
@@ -24,10 +29,74 @@ export function maskOpReferences(content: string): string {
  */
 export function findUnquotedOpReferences(content: string): string[] {
   return content.split(/\r?\n/).filter((line) => {
-    const trimmed = line.trimStart()
-    if (trimmed.startsWith("#")) return false
-    return /=\s*op:\/\//.test(trimmed)
+    if (isCommentLine(line)) return false
+    return /=\s*op:\/\//.test(line)
   })
+}
+
+/**
+ * Builds the placeholder swapped in for a commented `op://` line. The token
+ * deliberately contains no `op://`, so `op inject` passes it through untouched
+ * and `restoreProtectedComments` can find it to swap back.
+ */
+function protectedCommentToken(index: number): string {
+  return `__SETUP_DOTENV_PROTECTED_COMMENT_${index}__`
+}
+
+function isCommentedOpLine(line: string): boolean {
+  return isCommentLine(line) && line.includes("op://")
+}
+
+/**
+ * `op inject` does blind text substitution — it resolves an `op://` reference on
+ * a `#`-commented line exactly like an active one. For a dotenv template that is
+ * wrong twice over: the commented item may not exist (failing the whole inject),
+ * and if it does exist its secret is written into a plaintext comment. So we
+ * swap each commented `op://` line for a sentinel before injecting and restore
+ * it verbatim afterward (`restoreProtectedComments`).
+ *
+ * Only whole-line comments are protected; an `op://` in a trailing comment on an
+ * active assignment is still left for `op inject`.
+ */
+export function protectCommentedOpReferences(content: string): {
+  protectedContent: string
+  protectedLines: string[]
+} {
+  const protectedLines: string[] = []
+  const lines = content.split(/\r?\n/).map((line) => {
+    if (!isCommentedOpLine(line)) return line
+    const token = protectedCommentToken(protectedLines.length)
+    protectedLines.push(line)
+    return token
+  })
+
+  // No commented refs: return the input untouched. Load-bearing, not a
+  // micro-optimisation — the rejoin below collapses to one EOL, so a file with
+  // mixed line endings only survives byte-for-byte on this early-return path.
+  if (protectedLines.length === 0) {
+    return { protectedContent: content, protectedLines }
+  }
+
+  // Rejoin on the dominant line ending so a CRLF template isn't silently
+  // rewritten to LF.
+  const eol = content.includes("\r\n") ? "\r\n" : "\n"
+  return { protectedContent: lines.join(eol), protectedLines }
+}
+
+/**
+ * Inverse of `protectCommentedOpReferences`: swaps each sentinel back to its
+ * original comment line. Matching on the sentinel text rather than line position
+ * keeps this correct even if `op inject` changed the line count — e.g. a
+ * resolved secret that spanned multiple lines.
+ */
+export function restoreProtectedComments(
+  injected: string,
+  protectedLines: string[]
+): string {
+  return protectedLines.reduce(
+    (acc, line, index) => acc.split(protectedCommentToken(index)).join(line),
+    injected
+  )
 }
 
 export function classifyOpInjectError(
