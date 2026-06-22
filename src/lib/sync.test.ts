@@ -472,5 +472,74 @@ describe("syncDotenv", () => {
         "<resolved from op://vault/api/key>"
       )
     })
+
+    // Reported bug: a commented op:// example caused the whole `op inject` to
+    // fail ("item ... does not have a field ...") even though the reference is
+    // on a comment line and never becomes a variable. These run the real
+    // (non-dry-run) path; since no live op:// ref survives comment-protection,
+    // op inject is never invoked, so they pass without the `op` CLI installed.
+    it("does not resolve commented op:// references with --skip-empty-source-values", () => {
+      const exampleContent = [
+        '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+        "DATABASE_URL=postgres://localhost/app",
+        "PORT=3000"
+      ].join("\n")
+      writeFileSync(testExamplePath, exampleContent)
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true,
+        skipEmptySourceValues: true
+      })
+
+      expect(result.bootstrapped).toBe(true)
+      expect(result.missingKeys).toEqual(["DATABASE_URL", "PORT"])
+
+      const envContent = readFileSync(testEnvPath, "utf8")
+      expect(envContent).toContain('DATABASE_URL="postgres://localhost/app"')
+      expect(envContent).toContain('PORT="3000"')
+      // The commented reference is not a variable and must not leak through.
+      expect(envContent).not.toContain("KMS_KEY_ID")
+    })
+
+    it("preserves a commented op:// example verbatim on bootstrap without resolving it", () => {
+      const exampleContent = [
+        "# Uncomment to enable KMS:",
+        '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+        "DATABASE_URL=postgres://localhost/app"
+      ].join("\n")
+      writeFileSync(testExamplePath, exampleContent)
+
+      const result = syncDotenv({
+        envPath: testEnvPath,
+        templatePath: testExamplePath,
+        resolveOp: true
+      })
+
+      expect(result.bootstrapped).toBe(true)
+
+      const envContent = readFileSync(testEnvPath, "utf8")
+      // Whole template copied through; the secret is never injected into the
+      // comment, which stays exactly as authored.
+      expect(envContent).toBe(exampleContent)
+    })
+
+    it("still rejects an unquoted active op:// ref alongside a commented ref", () => {
+      const exampleContent = [
+        '# EXAMPLE="op://Dev/example/field"',
+        "API_KEY=op://vault/api/key"
+      ].join("\n")
+      writeFileSync(testExamplePath, exampleContent)
+
+      expect(() =>
+        syncDotenv({
+          envPath: testEnvPath,
+          templatePath: testExamplePath,
+          resolveOp: true
+        })
+      ).toThrow(/quote the following line/i)
+      expect(existsSync(testEnvPath)).toBe(false)
+    })
   })
 })

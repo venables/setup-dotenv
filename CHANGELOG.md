@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-Nothing yet.
+- Fix `sync --resolve-op` failing on commented-out `op://` examples such as
+  `# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"`. Because `op inject`
+  does plain text substitution with no notion of dotenv comments, references on
+  `#`-commented lines were resolved like active ones — failing the whole inject
+  when the item did not exist (e.g. under `--skip-empty-source-values`), and
+  leaking the secret into a plaintext comment when it did. Commented references
+  are now left untouched: they are protected before injection and restored
+  verbatim, and when every `op://` reference lives in a comment `op inject` is
+  not invoked at all. Active assignments are unaffected — quoted refs still
+  resolve and unquoted active refs are still rejected with the same guidance.
 
 ## 3.0.1
 

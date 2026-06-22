@@ -7,6 +7,8 @@ import {
   findUnquotedOpReferences,
   hasOpReferences,
   maskOpReferences,
+  protectCommentedOpReferences,
+  restoreProtectedComments,
   spawnOpInject
 } from "./op"
 
@@ -26,14 +28,25 @@ function resolveTemplateContent(
     return maskOpReferences(rawContent)
   }
 
-  const unquoted = findUnquotedOpReferences(rawContent)
+  // Keep commented op:// refs away from `op inject`; restored verbatim below.
+  const { protectedContent, protectedLines } =
+    protectCommentedOpReferences(rawContent)
+
+  // Every op:// ref may have lived in a comment — if nothing live remains,
+  // return the raw template instead of shelling out to `op inject`.
+  if (!hasOpReferences(protectedContent)) return rawContent
+
+  const unquoted = findUnquotedOpReferences(protectedContent)
   if (unquoted.length > 0) {
     throw new Error(
       `--resolve-op requires op:// references to be quoted so resolved values survive parsing. Quote the following line(s) in your template:\n${unquoted.map((line) => `  ${line}`).join("\n")}`
     )
   }
 
-  return spawnOpInject(rawContent)
+  return restoreProtectedComments(
+    spawnOpInject(protectedContent),
+    protectedLines
+  )
 }
 
 function getKeysToProcess(
