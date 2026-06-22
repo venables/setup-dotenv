@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 3.0.2
+
 - Fix `sync --resolve-op` failing on commented-out `op://` examples such as
   `# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"`. Because `op inject`
   does plain text substitution with no notion of dotenv comments, references on
