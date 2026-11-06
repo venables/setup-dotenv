@@ -50,8 +50,8 @@
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "oxfmt": "latest",
-    "oxlint": "latest",
-    "oxlint-tsgolint": "latest",
+    "oxlint": "^1.91.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "tsdown": "^0.21.10",
     "typescript": "^6.0.3"
   }
