@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "commander": "^14.0.3",
-    "dotenv": "^17.4.2"
+    "dotenv": "^18.0.9"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
