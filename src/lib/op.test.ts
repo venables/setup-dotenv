@@ -86,7 +86,7 @@ describe("findUnquotedOpReferences", () => {
 
 describe("protectCommentedOpReferences", () => {
   it("swaps a commented op:// line for a sentinel that carries no op:// ref", () => {
-    const content = '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"'
+    const content = '# KMS_KEY_ID="op://vault/item/KMS_KEY_ID"'
     const { protectedContent, protectedLines } =
       protectCommentedOpReferences(content)
 
@@ -123,7 +123,7 @@ describe("protectCommentedOpReferences", () => {
 
   it("round-trips: restore after an identity inject returns the original", () => {
     const content = [
-      '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+      '# KMS_KEY_ID="op://vault/item/KMS_KEY_ID"',
       "DATABASE_URL=postgres://localhost/app"
     ].join("\n")
     const { protectedContent, protectedLines } =
@@ -137,7 +137,7 @@ describe("protectCommentedOpReferences", () => {
 
   it("restores commented lines verbatim while active refs are resolved", () => {
     const content = [
-      '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+      '# KMS_KEY_ID="op://vault/item/KMS_KEY_ID"',
       'API_KEY="op://vault/api/key"'
     ].join("\n")
     const { protectedContent, protectedLines } =
@@ -151,7 +151,7 @@ describe("protectCommentedOpReferences", () => {
 
     expect(restoreProtectedComments(injected, protectedLines)).toBe(
       [
-        '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+        '# KMS_KEY_ID="op://vault/item/KMS_KEY_ID"',
         'API_KEY="resolved-secret"'
       ].join("\n")
     )

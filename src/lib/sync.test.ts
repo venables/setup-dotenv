@@ -480,7 +480,7 @@ describe("syncDotenv", () => {
     // op inject is never invoked, so they pass without the `op` CLI installed.
     it("does not resolve commented op:// references with --skip-empty-source-values", () => {
       const exampleContent = [
-        '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+        '# KMS_KEY_ID="op://vault/item/KMS_KEY_ID"',
         "DATABASE_URL=postgres://localhost/app",
         "PORT=3000"
       ].join("\n")
@@ -506,7 +506,7 @@ describe("syncDotenv", () => {
     it("preserves a commented op:// example verbatim on bootstrap without resolving it", () => {
       const exampleContent = [
         "# Uncomment to enable KMS:",
-        '# KMS_KEY_ID="op://Dev/bank-env-vars-local/KMS_KEY_ID"',
+        '# KMS_KEY_ID="op://vault/item/KMS_KEY_ID"',
         "DATABASE_URL=postgres://localhost/app"
       ].join("\n")
       writeFileSync(testExamplePath, exampleContent)
