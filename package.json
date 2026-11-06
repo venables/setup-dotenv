@@ -44,7 +44,7 @@
     "typecheck": "tsc --noEmit --pretty"
   },
   "dependencies": {
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "dotenv": "^18.0.9"
   },
   "devDependencies": {
@@ -54,5 +54,8 @@
     "oxlint-tsgolint": "^7.0.2005",
     "tsdown": "^0.23.5",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }
